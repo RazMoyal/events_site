@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>יומן אירועים</title>
+  <!-- טעינת React, ReactDOM ו-Babel מה-CDN -->
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <style>
+    /* Reset ובסיס */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #fff;
+      color: #000;
+      direction: rtl;
+    }
+    /* כותרת עליונה עם המבורגר */
+    .header {
+      background-color: #000;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+    }
+    .header h1 {
+      margin: 0;
+      cursor: pointer;
+    }
+    .hamburger {
+      font-size: 24px;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      margin-right: 15px;
+    }
+    /* תפריט המבורגר – מופיע כ-overlay */
+    .overlay-menu {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 250px;
+      height: 100%;
+      background-color: #000;
+      color: #fff;
+      padding: 20px;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+      border-radius: 8px;
+    }
+    .overlay-menu.open {
+      transform: translateX(0);
+    }
+    .overlay-menu h2 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    .overlay-menu ul {
+      list-style: none;
+      padding: 0;
+      margin: 20px 0;
+    }
+    .overlay-menu ul li {
+      margin: 15px 0;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .overlay-menu ul li:hover {
+      text-decoration: underline;
+    }
+    .overlay-menu button {
+      margin-top: 20px;
+      width: 100%;
+      border-radius: 8px;
+    }
+    /* עיצוב תוכן ראשי */
+    .main-content {
+      padding: 20px;
+    }
+    h1, h2 {
+      margin: 10px 0;
+    }
+    .input-field {
+      margin-bottom: 15px;
+    }
+    /* מחלקה להצגה באותה שורה ללא מרווחים */
+    .input-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 15px;
+    }
+    .input-inline label {
+      margin: 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #000;
+      border-radius: 8px;
+      background-color: #fff;
+      color: #000;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #000;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      opacity: 0.8;
+    }
+    /* עיצוב טבלה – נעשה שימוש ב-border-radius עבור הטבלה */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-bottom: 20px;
+      border: 1px solid #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border: 1px solid #000;
+    }
+    /* עיצוב עבור "כל האירועים" */
+    .event-item {
+      padding: 15px;
+      border: 1px solid #000;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+    .edit-buttons button {
+      margin-right: 10px;
+      border-radius: 8px;
+    }
+    /* אזור סינון */
+    .filter-section {
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #000;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    
+    function App() {
+      // מערך שמות החודשים בעברית – לשימוש בפורמט חודש
+      const hebrewMonths = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+      
+      // פונקציית עזר לפורמט תאריך: dd/mm/yy
+      function formatDate(dateStr) {
+        if (!dateStr) return "";
+        const parts = dateStr.split("-");
+        if (parts.length !== 3) return dateStr;
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year.slice(2)}`;
+      }
+      
+      // פונקציית עזר לקבלת פורמט חודש-שנה
+      function formatMonthYear(monthKey) {
+        // monthKey: "YYYY-MM"
+        const parts = monthKey.split("-");
+        if (parts.length !== 2) return monthKey;
+        const [year, month] = parts;
+        return `${hebrewMonths[parseInt(month)-1]} ${year}`;
+      }
+      
+      // פונקציה לקיבוץ אירועים לפי חודש (מפתח: "YYYY-MM")
+      function groupEventsByMonth(eventsArray) {
+        const groups = {};
+        eventsArray.forEach(event => {
+          const key = event.date.slice(0, 7);
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(event);
+        });
+        return groups;
+      }
+      
+      // ניהול תפריט המבורגר ותצוגות
+      const [menuOpen, setMenuOpen] = useState(false);
+      // "home" = דף בית, "add" = הוספת אירוע, "all" = כל האירועים
+      const [activeView, setActiveView] = useState("home");
+      const [events, setEvents] = useState([]);
+      
+      // סטייט להוספת אירוע – עבור "אולם" ברירת מחדל היא "רוי"
+      const [hall, setHall] = useState('רוי');
+      const [eventType, setEventType] = useState('');
+      const [date, setDate] = useState('');
+      const [amount, setAmount] = useState('');
+      const [notes, setNotes] = useState('');
+      const [digi, setDigi] = useState('');       // שדה טקסט פתוח
+      const [masach, setMasach] = useState(false);  // טוגל – checkbox
+      const [discount, setDiscount] = useState('');  // שדה "הנחה"
+      
+      // סטייט לסינון ב-"כל האירועים"
+      const [filterMonth, setFilterMonth] = useState('');
+      
+      // סטייט לעריכת אירועים
+      const [editingEventId, setEditingEventId] = useState(null);
+      const [editForm, setEditForm] = useState({ 
+        hall: '', 
+        eventType: '', 
+        date: '', 
+        amount: '', 
+        notes: '', 
+        digi: '', 
+        masach: false,
+        discount: ''
+      });
+      
+      // טעינת אירועים מ-localStorage בהפעלה
+      useEffect(() => {
+        const storedEvents = localStorage.getItem('events');
+        if (storedEvents) {
+          setEvents(JSON.parse(storedEvents));
+        }
+      }, []);
+      
+      // שמירת אירועים ל-localStorage
+      useEffect(() => {
+        localStorage.setItem('events', JSON.stringify(events));
+      }, [events]);
+      
+      const addEvent = () => {
+        if (!hall || !eventType || !date || !amount) {
+          alert("נא למלא את כל השדות (אולם, סוג אירוע, תאריך, סכום)");
+          return;
+        }
+        const newEvent = {
+          id: Date.now(),
+          hall,
+          eventType,
+          date, // בפורמט YYYY-MM-DD
+          amount: parseFloat(amount),
+          notes,
+          digi,      // שדה טקסט
+          masach,    // ערך בוליאני
+          discount: discount ? parseFloat(discount) : 0
+        };
+        setEvents([newEvent, ...events]);
+        // איפוס השדות – שדה אולם חוזר ל"רוי"
+        setHall('רוי');
+        setEventType('');
+        setDate('');
+        setAmount('');
+        setNotes('');
+        setDigi('');
+        setMasach(false);
+        setDiscount('');
+        // מעבר לדף הבית
+        setActiveView("home");
+      };
+      
+      const startEditing = (event) => {
+        setEditingEventId(event.id);
+        setEditForm({
+          hall: event.hall,
+          eventType: event.eventType,
+          date: event.date,
+          amount: event.amount,
+          notes: event.notes,
+          digi: event.digi,
+          masach: event.masach,
+          discount: event.discount || ''
+        });
+      };
+      
+      const saveEdit = (id) => {
+        const updatedEvents = events.map(ev => {
+          if (ev.id === id) {
+            return { 
+              ...ev, 
+              ...editForm, 
+              amount: parseFloat(editForm.amount), 
+              discount: editForm.discount ? parseFloat(editForm.discount) : 0 
+            };
+          }
+          return ev;
+        });
+        setEvents(updatedEvents);
+        setEditingEventId(null);
+      };
+      
+      const cancelEdit = () => {
+        setEditingEventId(null);
+      };
+      
+      const deleteEvent = (id) => {
+        if (confirm("האם אתה בטוח שברצונך למחוק את האירוע?")) {
+          const updated = events.filter(ev => ev.id !== id);
+          setEvents(updated);
+        }
+      };
+      
+      // נתוני תאריכים
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      // אירועים של החודש הנוכחי
+      const currentMonthEvents = events.filter(event => {
+        const eventDate = new Date(event.date);
+        return eventDate.getFullYear() === currentYear && (eventDate.getMonth() + 1) === currentMonth;
+      });
+      
+      // ספירת אירועים לחודש הנוכחי
+      const currentMonthCount = currentMonthEvents.length;
+      
+      // חישוב סך הכל לתשלום – סכום כל אירוע פחות ההנחה שלו
+      const totalToPay = currentMonthEvents.reduce((sum, event) => {
+        const disc = event.discount ? parseFloat(event.discount) : 0;
+        return sum + (event.amount - disc);
+      }, 0);
+      
+      // תצוגת דף הבית: כותרת "יומן אירועים", מספר אירועים, סך הכל לתשלום וטבלת אירועים של החודש
+      const renderHomeView = () => (
+        <div>
+          <h1>יומן אירועים</h1>
+          <p>לחיצה על הכותרת מחזירה לדף הבית</p>
+          <p>מספר אירועים לחודש זה: {currentMonthCount}</p>
+          <p>סך הכל לתשלום: {totalToPay} ₪</p>
+          <h2>אירועים של החודש הנוכחי</h2>
+          {currentMonthEvents.length === 0 ? (
+            <p>אין אירועים בחודש זה</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>תאריך</th>
+                  <th>אולם</th>
+                  <th>סוג אירוע</th>
+                  <th>דיגי</th>
+                  <th>מסך</th>
+                  <th>הנחה</th>
+                  <th>סכום</th>
+                  <th>הערות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentMonthEvents.map(event => (
+                  <tr key={event.id}>
+                    <td>{formatDate(event.date)}</td>
+                    <td>{event.hall}</td>
+                    <td>{event.eventType}</td>
+                    <td>{event.digi}</td>
+                    <td>{event.masach ? "מופעל" : "כבוי"}</td>
+                    <td>{event.discount || 0}</td>
+                    <td>{event.amount}</td>
+                    <td>{event.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      );
+      
+      // תצוגת "הוספת אירוע"
+      const renderAddView = () => (
+        <div>
+          <h1>הוספת אירוע</h1>
+          <div className="input-field">
+            <label>אולם <span style={{ color: "red" }}>*</span></label>
+            <select value={hall} onChange={e => setHall(e.target.value)}>
+              <option value="רוי">רוי</option>
+              <option value="אורימא">אורימא</option>
+            </select>
+          </div>
+          <div className="input-field">
+            <label>סוג אירוע</label>
+            <select value={eventType} onChange={e => setEventType(e.target.value)}>
+              <option value="">בחר</option>
+              <option value="בת מצווה">בת מצווה</option>
+              <option value="בר מצווה">בר מצווה</option>
+              <option value="חתונה">חתונה</option>
+              <option value="ברית">ברית</option>
+              <option value="יום הולדת">יום הולדת</option>
+              <option value="אחר">אחר</option>
+            </select>
+          </div>
+          <div className="input-field">
+            <label>תאריך</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div className="input-field">
+            <label>סכום</label>
+            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+          <div className="input-field">
+            <label>הערות</label>
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+          <div className="input-field">
+            <label>דיגי</label>
+            <input type="text" value={digi} onChange={e => setDigi(e.target.value)} />
+          </div>
+          <div className="input-field input-inline">
+            <label>מסך: {masach ? "מופעל" : "כבוי"}</label>
+            <input type="checkbox" checked={masach} onChange={e => setMasach(e.target.checked)} />
+          </div>
+          <div className="input-field">
+            <label>הנחה</label>
+            <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} />
+          </div>
+          <button onClick={addEvent}>הוסף אירוע</button>
+        </div>
+      );
+      
+      // תצוגת "כל האירועים" – מסודרת בטבלאות לפי חודש
+      const renderAllEventsView = () => {
+        return (
+          <div>
+            <h1>כל האירועים</h1>
+            <div className="filter-section">
+              <label>סינון לפי חודש</label>
+              <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} />
+              {filterMonth && (
+                <button onClick={() => setFilterMonth('')} style={{ marginTop: '10px' }}>נקה סינון</button>
+              )}
+            </div>
+            {filterMonth ? (
+              filteredEvents().length === 0 ? (
+                <p>אין אירועים להצגה</p>
+              ) : (
+                <div>
+                  <h2>אירועים לחודש {formatMonthYear(filterMonth)}</h2>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>תאריך</th>
+                        <th>אולם</th>
+                        <th>סוג אירוע</th>
+                        <th>דיגי</th>
+                        <th>מסך</th>
+                        <th>הנחה</th>
+                        <th>סכום</th>
+                        <th>הערות</th>
+                        <th>פעולות</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEvents().map(event => (
+                        <tr key={event.id}>
+                          <td>{formatDate(event.date)}</td>
+                          <td>{event.hall}</td>
+                          <td>{event.eventType}</td>
+                          <td>{event.digi}</td>
+                          <td>{event.masach ? "מופעל" : "כבוי"}</td>
+                          <td>{event.discount || 0}</td>
+                          <td>{event.amount}</td>
+                          <td>{event.notes}</td>
+                          <td>
+                            <button onClick={() => startEditing(event)}>ערוך</button>
+                            <button onClick={() => deleteEvent(event.id)}>מחק</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+              // אין ערך לסינון – קבוצת אירועים לפי חודש
+              Object.keys(groupEventsByMonth(events)).length === 0 ? (
+                <p>אין אירועים להצגה</p>
+              ) : (
+                Object.keys(groupEventsByMonth(events)).sort().map(key => {
+                  const group = groupEventsByMonth(events)[key];
+                  return (
+                    <div key={key}>
+                      <h2>אירועים לחודש {formatMonthYear(key)}</h2>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>תאריך</th>
+                            <th>אולם</th>
+                            <th>סוג אירוע</th>
+                            <th>דיגי</th>
+                            <th>מסך</th>
+                            <th>הנחה</th>
+                            <th>סכום</th>
+                            <th>הערות</th>
+                            <th>פעולות</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.map(event => (
+                            <tr key={event.id}>
+                              <td>{formatDate(event.date)}</td>
+                              <td>{event.hall}</td>
+                              <td>{event.eventType}</td>
+                              <td>{event.digi}</td>
+                              <td>{event.masach ? "מופעל" : "כבוי"}</td>
+                              <td>{event.discount || 0}</td>
+                              <td>{event.amount}</td>
+                              <td>{event.notes}</td>
+                              <td>
+                                <button onClick={() => startEditing(event)}>ערוך</button>
+                                <button onClick={() => deleteEvent(event.id)}>מחק</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })
+              )
+            )}
+          </div>
+        );
+      };
+      
+      // פונקציה לסינון – מוגדרת כפונקציה כדי להבטיח עדכון
+      const filteredEvents = () => {
+        return filterMonth ? events.filter(event => {
+          const eventDate = new Date(event.date);
+          const [year, month] = filterMonth.split('-').map(Number);
+          return eventDate.getFullYear() === year && (eventDate.getMonth() + 1) === month;
+        }) : events;
+      };
+      
+      return (
+        <div>
+          <div className="header">
+            <button className="hamburger" onClick={() => setMenuOpen(true)}>&#9776;</button>
+            {/* לחיצה על הכותרת מחזירה לדף הבית */}
+            <h1 onClick={() => setActiveView("home")}>יומן אירועים</h1>
+          </div>
+          
+          {menuOpen && (
+            <div className="overlay-menu open">
+              <h2>תפריט</h2>
+              <ul>
+                <li onClick={() => { setActiveView("home"); setMenuOpen(false); }}>דף בית</li>
+                <li onClick={() => { setActiveView("add"); setMenuOpen(false); }}>הוספת אירוע</li>
+                <li onClick={() => { setActiveView("all"); setMenuOpen(false); }}>אירועים</li>
+              </ul>
+              <button onClick={() => setMenuOpen(false)}>סגור</button>
+            </div>
+          )}
+          
+          <div className="main-content">
+            {activeView === "home" && renderHomeView()}
+            {activeView === "add" && renderAddView()}
+            {activeView === "all" && renderAllEventsView()}
+          </div>
+        </div>
+      );
+    }
+    
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
